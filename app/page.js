@@ -14,6 +14,8 @@ const fmtDate = (s) => {
          d.toLocaleTimeString(undefined,{hour:'numeric',minute:'2-digit'});
 };
 const n = (v) => Number(v || 0).toLocaleString();
+const RE_EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+const extractEmails = (s) => [...new Set((String(s).match(RE_EMAIL) || []).map(e => e.toLowerCase()))];
 
 export default function Page() {
   const [tab, setTab] = useState('overview');
@@ -149,12 +151,12 @@ function Verify({ onDone, stats }) {
   const fileRef = useRef(null);
   const timer = useRef(null);
 
-  const count = (text.match(/[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi) || []).length;
+  const count = extractEmails(text).length;
 
   function readFile(f) {
     const rd = new FileReader();
     rd.onload = () => {
-      setText(String(rd.result));
+      setText(extractEmails(rd.result).join('\n'));
       if (!source) setSource(f.name.replace(/\.[^.]+$/, ''));
       setMsg({ ok:true, text:`${f.name} loaded. Duplicates and anything already verified are removed when you start.` });
     };
