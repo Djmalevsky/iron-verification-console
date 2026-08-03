@@ -65,3 +65,17 @@ select
   count(*) filter (where disposable)::bigint    as disposable,
   count(*) filter (where full_inbox)::bigint    as full_inbox
 from email_verifications;
+-- Run this in Supabase → SQL Editor. Adds one view; nothing else changes.
+
+create or replace view verification_batch_stats as
+select
+  coalesce(source, '(unnamed)')                                     as source,
+  count(*)::bigint                                                  as total,
+  count(*) filter (where status = 'safe')::bigint                   as safe,
+  count(*) filter (where status = 'risky')::bigint                  as risky,
+  count(*) filter (where status = 'invalid')::bigint                as invalid,
+  count(*) filter (where status in ('unknown','error'))::bigint     as unresolved,
+  max(checked_at)                                                   as last_seen
+from email_verifications
+group by 1
+order by max(checked_at) desc;
