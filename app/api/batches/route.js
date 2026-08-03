@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const rows = await sbJson('verification_segments?select=*');
-    const keys = ['total','deliverable','safe_all','role','catch_all','unresolved','invalid','disposable','full_inbox','mailable'];
+    const keys = ['total','deliverable','safe_all','role','risky_all','catch_all','unresolved','invalid','disposable','full_inbox','error','discarded','mailable'];
     const all = { source:null, last_seen:null };
     keys.forEach(k => all[k] = 0);
     for (const r of rows) {

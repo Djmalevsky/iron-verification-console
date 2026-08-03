@@ -415,8 +415,8 @@ function Batches({ onChange }) {
 
   const panel = (b) => (
     <div className="segments">
-      {SEGMENT_ORDER.filter(k => Number(b[k] || 0) > 0).map(k => (
-        <a key={k} className="seg" href={`/api/export?segment=${k}${b.source ? `&source=${encodeURIComponent(b.source)}` : ''}`}>
+      {SEGMENT_ORDER.map(k => (
+        <a key={k} className={"seg" + (Number(b[k]||0) === 0 ? " seg-empty" : "")} href={`/api/export?segment=${k}${b.source ? `&source=${encodeURIComponent(b.source)}` : ''}`}>
           <span className="seg-n">{n(b[k])}</span>
           <span className="seg-l">{SEGMENTS[k].label}</span>
           <span className="seg-note">{SEGMENTS[k].note}</span>
