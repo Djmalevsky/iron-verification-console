@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { SEGMENTS, SEGMENT_ORDER } from '@/lib/segments';
 
 const COLORS = { safe:'#1c7a56', invalid:'#bf3b30', risky:'#b3782a', unknown:'#9aa0a8', error:'#6b5b8a' };
 const ORDER  = ['safe','risky','unknown','invalid','error'];
@@ -380,6 +381,8 @@ function Results({ batches }) {
 
 function Batches({ onChange }) {
   const [rows, setRows] = useState(null);
+  const [all, setAll] = useState(null);
+  const [open, setOpen] = useState('__all__');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState('');
 
@@ -388,96 +391,84 @@ function Batches({ onChange }) {
       const res = await fetch('/api/batches');
       const d = await res.json();
       if (d.error) { setMsg({ ok:false, text:d.error }); return; }
-      setRows(d.batches || []);
+      setRows(d.batches || []); setAll(d.all || null);
     } catch (e) { setMsg({ ok:false, text:e.message }); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function remove(source, label) {
-    const typed = window.prompt(
-      `Deleting ${label} removes those addresses from the cache, so they will be verified again next time they appear.\n\nType DELETE to confirm.`
-    );
+    const typed = window.prompt(`Deleting ${label} removes those addresses from the cache, so they will be verified again next time they appear.\n\nType DELETE to confirm.`);
     if (typed !== 'DELETE') return;
-
     setBusy(source || '__all__');
     try {
       const qs = source === null ? 'all=1' : `source=${encodeURIComponent(source)}`;
       const res = await fetch(`/api/batches?${qs}`, { method:'DELETE' });
       const d = await res.json();
       setMsg(d.error ? { ok:false, text:d.error } : { ok:true, text:d.message });
-      await load();
-      await onChange();
-    } catch (e) {
-      setMsg({ ok:false, text:e.message });
-    } finally { setBusy(''); }
+      await load(); await onChange();
+    } catch (e) { setMsg({ ok:false, text:e.message }); }
+    finally { setBusy(''); }
   }
 
   if (!rows) return <section><div className="tally">Loading…</div></section>;
+
+  const panel = (b) => (
+    <div className="segments">
+      {SEGMENT_ORDER.filter(k => Number(b[k] || 0) > 0).map(k => (
+        <a key={k} className="seg" href={`/api/export?segment=${k}${b.source ? `&source=${encodeURIComponent(b.source)}` : ''}`}>
+          <span className="seg-n">{n(b[k])}</span>
+          <span className="seg-l">{SEGMENTS[k].label}</span>
+          <span className="seg-note">{SEGMENTS[k].note}</span>
+          <span className="seg-dl">Download CSV</span>
+        </a>
+      ))}
+    </div>
+  );
+
+  const row = (b, key, label) => {
+    const isOpen = open === key;
+    return (
+      <div key={key}>
+        <div className="lrow" style={{ gridTemplateColumns:'1fr 90px 90px 110px 150px 170px' }}>
+          <button className="linky" onClick={() => setOpen(isOpen ? '' : key)}>{isOpen ? '▾' : '▸'} {label}</button>
+          <span className="fig">{n(b.total)}</span>
+          <span className="fig"><b>{n(b.mailable)}</b></span>
+          <span className="fig">{n(b.unresolved)}</span>
+          <span className="meta">{fmtDate(b.last_seen)}</span>
+          <span style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
+            <button type="button" style={{ padding:'7px 13px', fontSize:12.5 }} onClick={() => setOpen(isOpen ? '' : key)}>{isOpen ? 'Hide' : 'Downloads'}</button>
+            <button type="button" disabled={busy === (b.source ?? '__all__')} style={{ padding:'7px 13px', fontSize:12.5 }}
+              onClick={() => remove(b.source ?? null, b.source ? `"${b.source}" (${n(b.total)} addresses)` : 'every batch')}>
+              {busy === (b.source ?? '__all__') ? '…' : 'Delete'}
+            </button>
+          </span>
+        </div>
+        {isOpen && panel(b)}
+      </div>
+    );
+  };
 
   return (
     <section>
       <div className="block">
         <div className="block-head">
-          <h2>Batches</h2>
-          <p className="lede">
-            Every list you have sent through, newest first. Download pulls the valid
-            addresses for that batch as a CSV. Deleting removes them from the database
-            entirely — including from the ninety-day cache, so they will cost throughput
-            again the next time they turn up in a list.
-          </p>
+          <h2>Batches and downloads</h2>
+          <p className="lede">Open a batch to pull any slice of it as a CSV — the send list, the suppression list, the catch-all domains, or the ones no mail server would answer for. Each download carries every stored field, so you can join it back to your own data.</p>
         </div>
-
-        {!rows.length ? (
-          <div className="blank">
-            <b>No batches yet</b>
-            <span>Send a list through and it will appear here.</span>
+        <div className="ledger">
+          <div className="lrow" style={{ gridTemplateColumns:'1fr 90px 90px 110px 150px 170px', paddingBottom:10 }}>
+            <span className="eyebrow">Batch</span>
+            <span className="eyebrow" style={{ textAlign:'right' }}>Total</span>
+            <span className="eyebrow" style={{ textAlign:'right' }}>Mailable</span>
+            <span className="eyebrow" style={{ textAlign:'right' }}>No answer</span>
+            <span className="eyebrow">Last run</span>
+            <span />
           </div>
-        ) : (
-          <>
-            <div className="ledger">
-              <div className="lrow" style={{ gridTemplateColumns:'1fr 90px 90px 110px 150px 170px', paddingBottom:10 }}>
-                <span className="eyebrow">Batch</span>
-                <span className="eyebrow" style={{ textAlign:'right' }}>Total</span>
-                <span className="eyebrow" style={{ textAlign:'right' }}>Valid</span>
-                <span className="eyebrow" style={{ textAlign:'right' }}>Unresolved</span>
-                <span className="eyebrow">Last run</span>
-                <span />
-              </div>
-              {rows.map((b) => (
-                <div className="lrow" key={b.source}
-                  style={{ gridTemplateColumns:'1fr 90px 90px 110px 150px 170px' }}>
-                  <span className="dom" title={b.source}>{b.source}</span>
-                  <span className="fig">{n(b.total)}</span>
-                  <span className="fig"><b>{n(b.safe)}</b></span>
-                  <span className="fig">{n(b.unresolved)}</span>
-                  <span className="meta">{fmtDate(b.last_seen)}</span>
-                  <span style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-                    <a href={`/api/export?status=safe&source=${encodeURIComponent(b.source)}`}>
-                      <button type="button" style={{ padding:'7px 13px', fontSize:12.5 }}>Download</button>
-                    </a>
-                    <button type="button" disabled={busy === b.source}
-                      style={{ padding:'7px 13px', fontSize:12.5 }}
-                      onClick={() => remove(b.source, `"${b.source}" (${n(b.total)} addresses)`)}>
-                      {busy === b.source ? '…' : 'Delete'}
-                    </button>
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ marginTop:26, display:'flex', justifyContent:'space-between', alignItems:'center', gap:16, flexWrap:'wrap' }}>
-              <span className="tally">
-                {rows.length} {rows.length === 1 ? 'batch' : 'batches'}
-              </span>
-              <button type="button" disabled={busy === '__all__'}
-                onClick={() => remove(null, 'every batch')}>
-                {busy === '__all__' ? 'Clearing…' : 'Clear the whole database'}
-              </button>
-            </div>
-          </>
-        )}
-
+          {all && all.total > 0 && row(all, '__all__', 'Everything')}
+          {rows.map(b => row(b, b.source, b.source))}
+          {!rows.length && (<div className="lrow"><span className="dom">No batches yet</span><span /><span /></div>)}
+        </div>
         {msg && <div className={'msg ' + (msg.ok ? 'ok' : 'bad')}>{msg.text}</div>}
       </div>
     </section>
