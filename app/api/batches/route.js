@@ -3,7 +3,15 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const rows = await sbJson('verification_segments?select=*');
+    const [rows, split] = await Promise.all([
+      sbJson('verification_segments?select=*'),
+      sbJson('verification_segments_by_verifier?select=*'),
+    ]);
+
+    // Attach each batch's per-verifier breakdown.
+    const bySource = {};
+    for (const r of split) (bySource[r.source] = bySource[r.source] || []).push(r);
+    for (const r of rows) r.verifiers = bySource[r.source] || [];
     const keys = ['total','deliverable','safe_all','role','risky_all','catch_all','unresolved','invalid','disposable','full_inbox','error','discarded','mailable'];
     const all = { source:null, last_seen:null };
     keys.forEach(k => all[k] = 0);
@@ -11,6 +19,15 @@ export async function GET() {
       keys.forEach(k => all[k] += Number(r[k] || 0));
       if (!all.last_seen || new Date(r.last_seen) > new Date(all.last_seen)) all.last_seen = r.last_seen;
     }
+    // Totals per verifier across every batch.
+    const vAll = {};
+    for (const r of split) {
+      const v = r.verifier || 'reacher';
+      vAll[v] = vAll[v] || { verifier: v };
+      for (const k of keys) vAll[v][k] = (vAll[v][k] || 0) + Number(r[k] || 0);
+    }
+    all.verifiers = Object.values(vAll);
+
     return Response.json({ batches: rows, all });
   } catch (err) { return Response.json({ error: err.message }, { status:500 }); }
 }

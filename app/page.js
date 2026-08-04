@@ -383,6 +383,7 @@ function Batches({ onChange }) {
   const [rows, setRows] = useState(null);
   const [all, setAll] = useState(null);
   const [open, setOpen] = useState('__all__');
+  const [who, setWho] = useState({});
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState('');
 
@@ -413,25 +414,59 @@ function Batches({ onChange }) {
 
   if (!rows) return <section><div className="tally">Loading…</div></section>;
 
-  const panel = (b) => (
-    <div className="segments">
-      {SEGMENT_ORDER.map(k => (
-        <a key={k} className={"seg" + (Number(b[k]||0) === 0 ? " seg-empty" : "")} href={`/api/export?segment=${k}${b.source ? `&source=${encodeURIComponent(b.source)}` : ''}`}>
-          <span className="seg-n">{n(b[k])}</span>
-          <span className="seg-l">{SEGMENTS[k].label}</span>
-          <span className="seg-note">{SEGMENTS[k].note}</span>
-          <span className="seg-dl">Download CSV</span>
-        </a>
-      ))}
-    </div>
-  );
+  const LABEL = { reacher: 'Reacher only', reoon: 'Reoon only' };
+
+  const panel = (b, key) => {
+    const pick = who[key] || 'both';
+    const counts = pick === 'both'
+      ? b
+      : (b.verifiers || []).find(v => (v.verifier || 'reacher') === pick) || {};
+    const qs = (seg) =>
+      `/api/export?segment=${seg}` +
+      (b.source ? `&source=${encodeURIComponent(b.source)}` : '') +
+      (pick === 'both' ? '' : `&verifier=${pick}`);
+
+    return (
+      <div>
+        <div className="whobar">
+          <span className="eyebrow">Verified by</span>
+          {['both', 'reacher', 'reoon'].map(v => (
+            <button key={v} type="button"
+              className={'chip' + (pick === v ? ' on' : '')}
+              onClick={() => setWho({ ...who, [key]: v })}>
+              {v === 'both' ? 'Both' : LABEL[v]}
+            </button>
+          ))}
+          <span className="whonote">
+            {pick === 'both' && 'Everything, whichever verifier answered.'}
+            {pick === 'reacher' && 'Only what your own server confirmed on the first pass.'}
+            {pick === 'reoon' && 'Only what Reacher could not answer and Reoon resolved.'}
+          </span>
+        </div>
+        <div className="segments">
+          {SEGMENT_ORDER.map(k => (
+            <a key={k} className={'seg' + (Number(counts[k]||0) === 0 ? ' seg-empty' : '')} href={qs(k)}>
+              <span className="seg-n">{n(counts[k])}</span>
+              <span className="seg-l">{SEGMENTS[k].label}</span>
+              <span className="seg-note">{SEGMENTS[k].note}</span>
+              <span className="seg-dl">Download CSV</span>
+            </a>
+          ))}
+        </div>
+      </div>
+    );
+  };
 
   const row = (b, key, label) => {
     const isOpen = open === key;
+    const split = (b.verifiers || []).map(v => `${(v.verifier||'reacher')} ${n(v.total)}`).join(' · ');
     return (
       <div key={key}>
         <div className="lrow" style={{ gridTemplateColumns:'1fr 90px 90px 110px 150px 170px' }}>
-          <button className="linky" onClick={() => setOpen(isOpen ? '' : key)}>{isOpen ? '▾' : '▸'} {label}</button>
+          <button className="linky" onClick={() => setOpen(isOpen ? '' : key)}>
+            {isOpen ? '▾' : '▸'} {label}
+            {split && <span className="splitnote"> — {split}</span>}
+          </button>
           <span className="fig">{n(b.total)}</span>
           <span className="fig"><b>{n(b.mailable)}</b></span>
           <span className="fig">{n(b.unresolved)}</span>
@@ -444,7 +479,7 @@ function Batches({ onChange }) {
             </button>
           </span>
         </div>
-        {isOpen && panel(b)}
+        {isOpen && panel(b, key)}
       </div>
     );
   };
@@ -454,7 +489,7 @@ function Batches({ onChange }) {
       <div className="block">
         <div className="block-head">
           <h2>Batches and downloads</h2>
-          <p className="lede">Open a batch to pull any slice of it as a CSV — the send list, the suppression list, the catch-all domains, or the ones no mail server would answer for. Each download carries every stored field, so you can join it back to your own data.</p>
+          <p className="lede">Open a batch to pull any slice of it as a CSV. Switch between both verifiers, your own server alone, or only the addresses Reacher could not answer and Reoon resolved — so you can always see which pass produced a given result.</p>
         </div>
         <div className="ledger">
           <div className="lrow" style={{ gridTemplateColumns:'1fr 90px 90px 110px 150px 170px', paddingBottom:10 }}>

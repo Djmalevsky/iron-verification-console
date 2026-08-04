@@ -9,12 +9,16 @@ export async function GET(request) {
   const p = new URL(request.url).searchParams;
   const segment = p.get('segment');
   const source = p.get('source');
+  const verifier = p.get('verifier');
   let filters;
   if (segment && SEGMENTS[segment]) {
     filters = SEGMENTS[segment].filter;
     if (source) filters += `&source=eq.${encodeURIComponent(source)}`;
   } else {
     filters = filterToQuery({ status:p.get('status'), q:p.get('q'), flag:p.get('flag'), source });
+  }
+  if (verifier) {
+    filters += (filters ? '&' : '') + `verifier=eq.${encodeURIComponent(verifier)}`;
   }
   const base = `email_verifications?select=${COLS.join(',')}&order=checked_at.desc` + (filters ? `&${filters}` : '');
   const stream = new ReadableStream({
